@@ -1,81 +1,10 @@
 import time
 from typing import Dict, List
 
-import requests
 from flask import Flask, jsonify, request
 
-
-def get_json(url: str) -> Dict:
-    """Returns JSON from URL.
-
-    Parameters
-    ----------
-    url : str
-        URL of the website to retrieve.
-
-    Returns
-    -------
-    Dict
-        JSON returned from the URL.
-    """
-
-    try:
-        response = requests.get(url, verify=False)
-        json = response.json()
-    except Exception as e:
-        json = {}
-
-    return json
-
-
-def all_item_ids() -> Dict[int, str]:
-    """Returns a dictionary for every item id and name.
-
-    Returns
-    -------
-    Dict[int, str]
-        Tenno Zone ID and item name.
-    """
-
-    items = {}
-    url = "https://tenno.zone/data"
-
-    items_data = get_json(url)["parts"]
-    if not items_data:
-        return {}
-
-    for item in items_data:
-        if any(
-            item["name"].find(part) > -1
-            for part in ["Neuroptics", "Chassis", "Systems"]
-        ):
-            item["name"] = item["name"].replace(" Blueprint", "")
-
-        items[item["id"]] = item["name"]
-
-    return items
-
-
-def get_items(url_id: str) -> List[str]:
-    """Returns the list of item names from a personal tenno.zone link.
-
-    Parameters
-    ----------
-    url_id : str
-        Personal ID string for tenno.zone URL.
-
-    Returns
-    -------
-    List[str]
-        Item names.
-    """
-
-    url = "https://tenno.zone/partlist/" + url_id
-
-    items = get_json(url)
-    all_items = all_item_ids()
-
-    return [all_items[item] for item in items]
+from src.common import get_json
+from src.wishlists import WishlistFactory
 
 
 def get_market_prices(item: str) -> List[Dict]:
@@ -117,7 +46,11 @@ def check():
 
 @app.route("/orders")
 def orders_json():
-    items = get_items(request.values["link"])
+    website = request.values["site"]
+    token = request.values["token"]
+
+    wishlist = WishlistFactory().get_wishlist(website)
+    items = wishlist.get_wishlist_items(token)
 
     item_orders = {}
 
@@ -137,7 +70,7 @@ def orders_json():
                 ):
                     sell_orders.append(order["platinum"])
 
-                buy_orders = sorted(buy_orders)[:5] if buy_orders else buy_orders
+                buy_orders = sorted(buy_orders)[-5:] if buy_orders else buy_orders
                 sell_orders = sorted(sell_orders)[:5] if sell_orders else sell_orders
 
             # Wait between items to keep within 3 API requests per second
